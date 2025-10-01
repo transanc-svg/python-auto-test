@@ -6,15 +6,21 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import time
+import json
+import os
+from oauth2client.service_account import ServiceAccountCredentials
 
 # --- Google スプレッドシート認証 ---
 scope = ["https://spreadsheets.google.com/feeds",
          "https://www.googleapis.com/auth/drive"]
 
-creds = ServiceAccountCredentials.from_json_keyfile_name(
-    r"C:\Users\DELL\Desktop\healthy-fuze-473307-g9-b106baf4e722.json", scope
-)
+# GitHub Secrets から JSON を読み込む
+google_creds = os.environ["GOOGLE_CREDENTIALS"]
+creds_dict = json.loads(google_creds)
+
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
+
 
 # --- スプレッドシート名 ---
 spreadsheet_name = "finland"
@@ -82,3 +88,4 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新10件のInstagram対応画像付きニュースをスプレッドシート 'finland' に追加しました。")
+
