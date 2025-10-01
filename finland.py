@@ -38,7 +38,7 @@ rss_url = "https://news.google.com/rss/search?hl=ja&gl=JP&ceid=JP%3Aja&oc=11&q=%
 feed = feedparser.parse(rss_url)
 
 # --- 最新10件を逆順にする（古い順から処理） ---
-entries_to_process = feed.entries[:20][::-1]
+entries_to_process = feed.entries[:10][::-1]
 
 # --- Selenium セットアップ（ヘッドレス） ---
 options = Options()
@@ -88,5 +88,6 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新10件のInstagram対応画像付きニュースをスプレッドシート 'finland' に追加しました。")
+
 
 
