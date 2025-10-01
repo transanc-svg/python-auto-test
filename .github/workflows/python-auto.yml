@@ -1,9 +1,9 @@
-name: Run Python Script
+name: Run Python Script every 2 hours
 
 on:
   schedule:
-    - cron: "0 9 * * *"   # 毎日 9:00 (UTC) に実行（日本時間だと18:00）
-  workflow_dispatch:       # 手動実行もできる
+    - cron: "0 */2 * * *"   # 2時間ごと（UTC基準）
+  workflow_dispatch:         # 手動実行もできる
 
 jobs:
   build:
@@ -25,4 +25,4 @@ jobs:
       - name: Run script
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-        run: python finland.py
+        run: python main.py
