@@ -1,0 +1,23 @@
+name: Python自動化
+
+# 実行タイミング（cron形式で指定）
+on:
+  schedule:
+    - cron: '0 9 * * *'  # 毎日 9:00 に実行
+  workflow_dispatch:  # 手動でも実行可能
+
+jobs:
+  run-python:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: コードをチェックアウト
+        uses: actions/checkout@v3
+
+      - name: Pythonセットアップ
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11  # Pythonバージョン指定
+
+      - name: スクリプト実行
+        run: python hello.py
