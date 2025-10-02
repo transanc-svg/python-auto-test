@@ -67,7 +67,10 @@ for entry in entries_to_process:
         try:
             og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
             image_url = og_image_element.get_attribute("content")
-            if not image_url or not image_url.lower().endswith(VALID_EXTENSIONS):
+            # 条件: og:image があり、拡張子対応、httpsあり
+            if (not image_url
+                or not image_url.lower().endswith(VALID_EXTENSIONS)
+                or not image_url.startswith("https://")):
                 image_url = None
         except:
             image_url = None
@@ -77,13 +80,13 @@ for entry in entries_to_process:
         original_url = google_url
         image_url = None
 
-    # --- og:image がある場合のみ書き込み ---
+    # --- 条件を満たす場合のみ書き込み ---
     if image_url and original_url not in existing_urls:
         sheet.append_row([title, original_url, "", "", image_url])
         existing_urls.append(original_url)
         print(f"追加: {title} → {original_url} / {image_url}")
     else:
-        print(f"スキップ: {title}（og:imageなし/Instagram非対応/既存）")
+        print(f"スキップ: {title}（og:imageなし/Instagram非対応/httpsなし/既存）")
 
 driver.quit()
 print("最新10件のニュースから og:image 付きの記事のみをスプレッドシート 'thai' に追加しました。")
