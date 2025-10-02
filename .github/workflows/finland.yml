@@ -1,4 +1,4 @@
-name: Run Python Script every 2 hours
+name: Run finland
 
 on:
   schedule:
