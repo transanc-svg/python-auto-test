@@ -8,7 +8,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 import time
 import json
 import os
-from oauth2client.service_account import ServiceAccountCredentials
 
 # --- Google スプレッドシート認証 ---
 scope = ["https://spreadsheets.google.com/feeds",
@@ -21,9 +20,8 @@ creds_dict = json.loads(google_creds)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
-
 # --- スプレッドシート名 ---
-spreadsheet_name = "finland"
+spreadsheet_name = "フィンランド"
 sheet = client.open(spreadsheet_name).sheet1
 
 # --- 既存のURLを取得して重複防止 ---
@@ -58,36 +56,38 @@ for entry in entries_to_process:
     title = entry.title
     google_url = entry.link
 
-    # SeleniumでオリジナルURLと画像を取得
     try:
         driver.get(google_url)
         time.sleep(2)
         original_url = driver.current_url
 
-        # ページ内の最初の画像を取得
+        image_url = None
+
+        # --- og:image を探す ---
         try:
-            img_element = driver.find_element("xpath", "//img")
-            image_url = img_element.get_attribute("src")
-            # Instagram 投稿可能な拡張子のみ許可
-            if not image_url or not image_url.lower().endswith(VALID_EXTENSIONS):
-                image_url = None  # 画像なし or 非対応形式 → スキップ
+            og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
+            image_url = og_image_element.get_attribute("content")
+            # 条件: og:image があり、拡張子対応、httpsあり
+            if (not image_url
+                or not image_url.lower().endswith(VALID_EXTENSIONS)
+                or not image_url.startswith("https://")):
+                image_url = None
         except:
             image_url = None
+
     except Exception as e:
         print(f"Error fetching URL for {title}: {e}")
         original_url = google_url
         image_url = None
 
-    # 画像があるかつ既存URLにない場合のみ書き込み
+    # --- 条件を満たす場合のみ書き込み ---
     if image_url and original_url not in existing_urls:
         sheet.append_row([title, original_url, "", "", image_url])
         existing_urls.append(original_url)
         print(f"追加: {title} → {original_url} / {image_url}")
     else:
-        print(f"スキップ: {title}（画像なし/Instagram非対応/既存）")
+        print(f"スキップ: {title}（og:imageなし/Instagram非対応/httpsなし/既存）")
 
 driver.quit()
-print("最新10件のInstagram対応画像付きニュースをスプレッドシート 'finland' に追加しました。")
-
-
+print("最新10件のニュースから og:image 付きの記事のみをスプレッドシート 'thai' に追加しました。")
 
