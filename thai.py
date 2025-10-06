@@ -104,6 +104,8 @@ for entry in entries_to_process:
 
     # --- 条件を満たす場合のみ書き込み ---
     if image_url and original_url not in existing_urls:
+        if not description:
+            description = ""  # description がない場合は空欄
         sheet.append_row([title, original_url, "", description, image_url])
         existing_urls.append(original_url)
         print(f"追加: {title} → {original_url} / {image_url} / {description}")
