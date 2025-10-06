@@ -51,15 +51,28 @@ if not existing_urls:
 # --- Instagram 投稿可能な拡張子 ---
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
+# --- 除外したいサイトドメイン ---
+EXCLUDE_DOMAINS = ["jp.fashionnetwork.com"]
+
 # --- 最新10件を処理 ---
 for entry in entries_to_process:
     title = entry.title
     google_url = entry.link
 
+    # --- 除外対象のURLならスキップ ---
+    if any(domain in google_url for domain in EXCLUDE_DOMAINS):
+        print(f"除外スキップ: {title} → {google_url}")
+        continue
+
     try:
         driver.get(google_url)
         time.sleep(2)
         original_url = driver.current_url
+
+        # --- 除外対象のURLならスキップ ---
+        if any(domain in original_url for domain in EXCLUDE_DOMAINS):
+            print(f"除外スキップ: {title} → {original_url}")
+            continue
 
         image_url = None
 
@@ -90,5 +103,3 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新10件のニュースから og:image 付きの記事のみをスプレッドシート 'thai' に追加しました。")
-
-
