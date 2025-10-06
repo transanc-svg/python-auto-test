@@ -46,7 +46,7 @@ driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), opti
 
 # --- ヘッダーがなければ追加 ---
 if not existing_urls:
-    sheet.append_row(["タイトル", "URL", "C列", "D列", "画像URL(E列)"])
+    sheet.append_row(["タイトル", "URL", "C列", "D列(description)", "画像URL(E列)"])
 
 # --- Instagram 投稿可能な拡張子 ---
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
@@ -75,6 +75,7 @@ for entry in entries_to_process:
             continue
 
         image_url = None
+        description = None
 
         # --- og:image を探す ---
         try:
@@ -88,18 +89,26 @@ for entry in entries_to_process:
         except:
             image_url = None
 
+        # --- meta description を取得 ---
+        try:
+            desc_element = driver.find_element("xpath", "//meta[@name='description']")
+            description = desc_element.get_attribute("content")
+        except:
+            description = None
+
     except Exception as e:
         print(f"Error fetching URL for {title}: {e}")
         original_url = google_url
         image_url = None
+        description = None
 
     # --- 条件を満たす場合のみ書き込み ---
     if image_url and original_url not in existing_urls:
-        sheet.append_row([title, original_url, "", "", image_url])
+        sheet.append_row([title, original_url, "", description, image_url])
         existing_urls.append(original_url)
-        print(f"追加: {title} → {original_url} / {image_url}")
+        print(f"追加: {title} → {original_url} / {image_url} / {description}")
     else:
         print(f"スキップ: {title}（og:imageなし/Instagram非対応/httpsなし/既存）")
 
 driver.quit()
-print("最新10件のニュースから og:image 付きの記事のみをスプレッドシート 'thai' に追加しました。")
+print("最新10件のニュースから og:image 付きの記事と description をスプレッドシート 'thai' に追加しました。")
