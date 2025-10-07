@@ -2,8 +2,10 @@ name: Run finland
 
 on:
   schedule:
-    - cron: "0 23-13/2 * * *"   # UTC基準: JST 8時〜22時の間だけ2時間ごと
-  workflow_dispatch:             # 手動実行もできる
+    # UTCで23時, 1時, 3時, 5時, 7時, 9時, 11時, 13時
+    - cron: "0 23 * * *"
+    - cron: "0 1-13/2 * * *"
+  workflow_dispatch:
 
 jobs:
   build:
