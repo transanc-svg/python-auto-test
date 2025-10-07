@@ -89,9 +89,4 @@ for entry in entries_to_process:
         print(f"スキップ: {title}（og:imageなし/Instagram非対応/httpsなし/既存）")
 
 driver.quit()
-print("最新10件のニュースから og:image 付きの記事のみをスプレッドシート 'thai' に追加しました。")
-
-
-
-
-
+print("最新10件のニュースから og:image 付きの記事のみをスプレッドシート 'finland' に追加しました。")
