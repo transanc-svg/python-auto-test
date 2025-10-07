@@ -2,8 +2,10 @@ name: Run thai
 
 on:
   schedule:
-    - cron: "0 */2 * * *"   # 2時間ごと（UTC基準）
-  workflow_dispatch:         # 手動実行もできる
+    # UTCで23時, 1時, 3時, 5時, 7時, 9時, 11時, 13時
+    - cron: "0 23 * * *"
+    - cron: "0 1-13/2 * * *"
+  workflow_dispatch:
 
 jobs:
   build:
