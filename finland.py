@@ -21,7 +21,7 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
 # --- スプレッドシート名 ---
-spreadsheet_name = "thai"
+spreadsheet_name = "フィンランド"
 sheet = client.open(spreadsheet_name).sheet1
 
 # --- 既存のURLを取得して重複防止 ---
@@ -114,3 +114,4 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新10件のニュースから og:image 付きの記事と description をスプレッドシート 'finland' に追加しました。")
+
