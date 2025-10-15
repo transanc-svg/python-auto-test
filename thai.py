@@ -52,7 +52,7 @@ if not existing_urls:
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 # --- 除外したいサイトドメイン ---
-EXCLUDE_DOMAINS = ["jp.fashionnetwork.com","newscast.jp","www.keidanren.or.jp"]
+EXCLUDE_DOMAINS = ["jp.fashionnetwork.com","newscast.jp","www.keidanren.or.jp","ashu-aseanstatistics.com"]
 
 # --- 最新10件を処理 ---
 for entry in entries_to_process:
@@ -114,6 +114,7 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新10件のニュースから og:image 付きの記事と description をスプレッドシート 'タイ' に追加しました。")
+
 
 
 
