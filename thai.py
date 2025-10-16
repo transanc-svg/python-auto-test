@@ -19,7 +19,6 @@ scope = ["https://spreadsheets.google.com/feeds",
 
 google_creds = os.environ["GOOGLE_CREDENTIALS"]
 creds_dict = json.loads(google_creds)
-
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
@@ -27,17 +26,17 @@ client = gspread.authorize(creds)
 spreadsheet_name = "タイ"
 sheet = client.open(spreadsheet_name).sheet1
 
-# --- 既存のURLを取得して重複防止 ---
-existing_urls = sheet.col_values(2)  # B列のURL
+# --- 既存URLを取得して重複防止 ---
+existing_urls = sheet.col_values(2)  # B列
 if existing_urls:
-    existing_urls = existing_urls[1:]  # ヘッダーを除外
+    existing_urls = existing_urls[1:]  # ヘッダーを除く
 else:
     existing_urls = []
 
-# --- RSSフィード ---
+# --- RSSフィード（Googleニュース: タイ） ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
 feed = feedparser.parse(rss_url)
-entries_to_process = feed.entries[:20][::-1]  # 古い順に処理
+entries_to_process = feed.entries[:10][::-1]  # 最新10件を古い順で処理
 
 # --- Selenium セットアップ ---
 options = Options()
@@ -52,14 +51,11 @@ if not existing_urls:
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
 EXCLUDE_DOMAINS = ["jp.fashionnetwork.com", "newscast.jp", "www.keidanren.or.jp", "ashu-aseanstatistics.com"]
 
-# --- TextRazorでハッシュタグを生成する関数 ---
+# --- TextRazorでハッシュタグを生成 ---
 def generate_hashtags(text):
     try:
         url = "https://api.textrazor.com/"
-        payload = {
-            "text": text,
-            "extractors": "entities,topics,words"
-        }
+        payload = {"text": text, "extractors": "entities,topics,words"}
         headers = {
             "X-TextRazor-Key": TEXTRAZOR_API_KEY,
             "Content-Type": "application/x-www-form-urlencoded"
@@ -72,23 +68,21 @@ def generate_hashtags(text):
         entities = data.get("response", {}).get("entities", [])
         tags = []
 
-        # --- 自信度が高い順に5つまで抽出 ---
         for e in sorted(entities, key=lambda x: x.get("confidenceScore", 0), reverse=True):
             tag = e.get("entityId") or e.get("matchedText")
-            if tag and tag not in tags:
+            if tag:
                 tag = tag.replace(" ", "").replace("#", "")
-                tags.append(tag)
+                if tag not in tags:
+                    tags.append(tag)
             if len(tags) >= 5:
                 break
 
-        # --- 数字や英語だけのタグは除外 ---
         tags = [t for t in tags if not any(c.isdigit() for c in t) and not t.isascii()]
 
         if not tags:
             return "#タイ #ニュース"
 
-        hashtags = " ".join([f"#{t}" for t in tags[:5]])
-        return hashtags
+        return " ".join(["#" + t for t in tags[:5]])
     except Exception as e:
         print("TextRazorエラー:", e)
         return "#タイ #ニュース"
@@ -111,20 +105,17 @@ for entry in entries_to_process:
             print(f"除外スキップ: {title} → {original_url}")
             continue
 
-        # --- og:image を取得 ---
+        # og:image
         image_url = None
         try:
             og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
             image_url = og_image_element.get_attribute("content")
-            if (not image_url
-                or not image_url.lower().endswith(VALID_EXTENSIONS)
-                or not image_url.startswith("https://")):
+            if not (image_url and image_url.lower().endswith(VALID_EXTENSIONS) and image_url.startswith("https://")):
                 image_url = None
         except:
             image_url = None
 
-        # --- meta description を取得 ---
-        description = None
+        # meta description
         try:
             desc_element = driver.find_element("xpath", "//meta[@name='description']")
             description = desc_element.get_attribute("content")
@@ -137,15 +128,23 @@ for entry in entries_to_process:
         image_url = None
         description = ""
 
-    # --- 条件を満たす場合のみスプレッドシートに書き込み ---
     if image_url and original_url not in existing_urls:
         hashtags = generate_hashtags(title)
         sheet.append_row([title, original_url, hashtags, description, image_url])
         existing_urls.append(original_url)
-        print(f"追加: {title} → {original_url} / {hashtags}")
-        time.sleep(1.2)  # TextRazorレート制限対策
+        print(f"追加: {title} → {hashtags}")
+        time.sleep(1.2)
     else:
-        print(f"スキップ: {title}（og:imageなし/Instagram非対応/既存）")
+        print(f"スキップ: {title}（og:imageなし/既存URL）")
+
+# --- 最大30件を超えた場合、古い順に削除 ---
+MAX_ROWS = 30
+total_rows = len(sheet.get_all_values())
+if total_rows > MAX_ROWS:
+    rows_to_delete = total_rows - MAX_ROWS
+    for _ in range(rows_to_delete):
+        sheet.delete_rows(2)  # ヘッダー行の次(2行目)から削除
+    print(f"{rows_to_delete}件の古いデータを削除しました。")
 
 driver.quit()
-print("完了: RSS記事＋ハッシュタグをスプレッドシートに追加しました。")
+print("完了: 最新10件を追加、最大30件を維持しました。")
