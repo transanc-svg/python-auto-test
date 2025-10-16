@@ -8,12 +8,15 @@ from webdriver_manager.chrome import ChromeDriverManager
 import time
 import json
 import os
+import requests
+
+# --- TextRazor APIキー ---
+TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
 
 # --- Google スプレッドシート認証 ---
 scope = ["https://spreadsheets.google.com/feeds",
          "https://www.googleapis.com/auth/drive"]
 
-# GitHub Secrets から JSON を読み込む
 google_creds = os.environ["GOOGLE_CREDENTIALS"]
 creds_dict = json.loads(google_creds)
 
@@ -34,32 +37,67 @@ else:
 # --- RSSフィード ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
 feed = feedparser.parse(rss_url)
+entries_to_process = feed.entries[:20][::-1]  # 古い順に処理
 
-# --- 最新10件を逆順にする（古い順から処理） ---
-entries_to_process = feed.entries[:20][::-1]
-
-# --- Selenium セットアップ（ヘッドレス） ---
+# --- Selenium セットアップ ---
 options = Options()
-options.add_argument('--headless')
-options.add_argument('--disable-gpu')
+options.add_argument("--headless")
+options.add_argument("--disable-gpu")
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 # --- ヘッダーがなければ追加 ---
 if not existing_urls:
-    sheet.append_row(["タイトル", "URL", "C列", "D列(description)", "画像URL(E列)"])
+    sheet.append_row(["タイトル", "URL", "ハッシュタグ(C列)", "説明(D列)", "画像URL(E列)"])
 
-# --- Instagram 投稿可能な拡張子 ---
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
+EXCLUDE_DOMAINS = ["jp.fashionnetwork.com", "newscast.jp", "www.keidanren.or.jp", "ashu-aseanstatistics.com"]
 
-# --- 除外したいサイトドメイン ---
-EXCLUDE_DOMAINS = ["jp.fashionnetwork.com","newscast.jp","www.keidanren.or.jp","ashu-aseanstatistics.com"]
+# --- TextRazorでハッシュタグを生成する関数 ---
+def generate_hashtags(text):
+    try:
+        url = "https://api.textrazor.com/"
+        payload = {
+            "text": text,
+            "extractors": "entities,topics,words"
+        }
+        headers = {
+            "X-TextRazor-Key": TEXTRAZOR_API_KEY,
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        response = requests.post(url, headers=headers, data=payload)
+        if response.status_code != 200:
+            return "#タイ #ニュース"
 
-# --- 最新10件を処理 ---
+        data = response.json()
+        entities = data.get("response", {}).get("entities", [])
+        tags = []
+
+        # --- 自信度が高い順に5つまで抽出 ---
+        for e in sorted(entities, key=lambda x: x.get("confidenceScore", 0), reverse=True):
+            tag = e.get("entityId") or e.get("matchedText")
+            if tag and tag not in tags:
+                tag = tag.replace(" ", "").replace("#", "")
+                tags.append(tag)
+            if len(tags) >= 5:
+                break
+
+        # --- 数字や英語だけのタグは除外 ---
+        tags = [t for t in tags if not any(c.isdigit() for c in t) and not t.isascii()]
+
+        if not tags:
+            return "#タイ #ニュース"
+
+        hashtags = " ".join([f"#{t}" for t in tags[:5]])
+        return hashtags
+    except Exception as e:
+        print("TextRazorエラー:", e)
+        return "#タイ #ニュース"
+
+# --- RSSの記事を処理 ---
 for entry in entries_to_process:
     title = entry.title
     google_url = entry.link
 
-    # --- 除外対象のURLならスキップ ---
     if any(domain in google_url for domain in EXCLUDE_DOMAINS):
         print(f"除外スキップ: {title} → {google_url}")
         continue
@@ -69,19 +107,15 @@ for entry in entries_to_process:
         time.sleep(2)
         original_url = driver.current_url
 
-        # --- 除外対象のURLならスキップ ---
         if any(domain in original_url for domain in EXCLUDE_DOMAINS):
             print(f"除外スキップ: {title} → {original_url}")
             continue
 
+        # --- og:image を取得 ---
         image_url = None
-        description = None
-
-        # --- og:image を探す ---
         try:
             og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
             image_url = og_image_element.get_attribute("content")
-            # 条件: og:image があり、拡張子対応、httpsあり
             if (not image_url
                 or not image_url.lower().endswith(VALID_EXTENSIONS)
                 or not image_url.startswith("https://")):
@@ -90,32 +124,28 @@ for entry in entries_to_process:
             image_url = None
 
         # --- meta description を取得 ---
+        description = None
         try:
             desc_element = driver.find_element("xpath", "//meta[@name='description']")
             description = desc_element.get_attribute("content")
         except:
-            description = None
+            description = ""
 
     except Exception as e:
         print(f"Error fetching URL for {title}: {e}")
         original_url = google_url
         image_url = None
-        description = None
+        description = ""
 
-    # --- 条件を満たす場合のみ書き込み ---
+    # --- 条件を満たす場合のみスプレッドシートに書き込み ---
     if image_url and original_url not in existing_urls:
-        if not description:
-            description = ""  # description がない場合は空欄
-        sheet.append_row([title, original_url, "", description, image_url])
+        hashtags = generate_hashtags(title)
+        sheet.append_row([title, original_url, hashtags, description, image_url])
         existing_urls.append(original_url)
-        print(f"追加: {title} → {original_url} / {image_url} / {description}")
+        print(f"追加: {title} → {original_url} / {hashtags}")
+        time.sleep(1.2)  # TextRazorレート制限対策
     else:
-        print(f"スキップ: {title}（og:imageなし/Instagram非対応/httpsなし/既存）")
+        print(f"スキップ: {title}（og:imageなし/Instagram非対応/既存）")
 
 driver.quit()
-print("最新10件のニュースから og:image 付きの記事と description をスプレッドシート 'タイ' に追加しました。")
-
-
-
-
-
+print("完了: RSS記事＋ハッシュタグをスプレッドシートに追加しました。")
