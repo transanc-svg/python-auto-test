@@ -41,7 +41,7 @@ if not existing_urls:
     sheet.append_row(["タイトル", "URL", "C列", "D列(description)", "画像URL(E列)"])
 
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
-EXCLUDE_DOMAINS = ["jp.fashionnetwork.com","newscast.jp","www.keidanren.or.jp","ashu-aseanstatistics.com","www.jetro.go.jp",]
+EXCLUDE_DOMAINS = ["jp.fashionnetwork.com","newscast.jp","www.keidanren.or.jp","ashu-aseanstatistics.com","www.jetro.go.jp","www.mri.co.jp"]
 
 # --- TextRazor APIキー ---
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
@@ -144,4 +144,5 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新ニュースから og:image と description とハッシュタグをスプレッドシートに追加しました。")
+
 
