@@ -28,7 +28,7 @@ existing_urls = existing_urls[1:] if existing_urls else []
 # --- RSSフィード ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
 feed = feedparser.parse(rss_url)
-entries_to_process = feed.entries[:50][::-1]  # 最新50件を古い順に
+entries_to_process = feed.entries[:20][::-1]  # 最新20件を古い順に
 
 # --- Selenium セットアップ ---
 options = Options()
@@ -41,17 +41,22 @@ if not existing_urls:
     sheet.append_row(["タイトル", "URL", "C列", "D列(description)", "画像URL(E列)"])
 
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
-EXCLUDE_DOMAINS = ["jp.fashionnetwork.com", "newscast.jp", "www.keidanren.or.jp", "ashu-aseanstatistics.com"]
 
 # --- TextRazor APIキー ---
-TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096c166561c9cfb85bc36b44c1c16c8b8a2"
+TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
 
-# --- TextRazorでハッシュタグ生成 ---
 def generate_hashtags(text):
+    """TextRazor APIでハッシュタグ生成"""
     url = "https://api.textrazor.com/"
-    payload = {"text": text, "extractors": "entities,topics,words"}
-    headers = {"X-TextRazor-Key": TEXTRAZOR_API_KEY, "Content-Type": "application/x-www-form-urlencoded"}
-    data = "&".join([f"{k}={requests.utils.quote(v)}" for k, v in payload.items()])
+    payload = {
+        "text": text,
+        "extractors": "entities,topics,words"
+    }
+    headers = {
+        "X-TextRazor-Key": TEXTRAZOR_API_KEY,
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    data = "&".join([f"{k}={requests.utils.quote(v)}" for k,v in payload.items()])
     try:
         res = requests.post(url, headers=headers, data=data, timeout=10)
         if res.status_code != 200:
@@ -59,12 +64,14 @@ def generate_hashtags(text):
         data_json = res.json()
         entities = data_json.get("response", {}).get("entities", [])
         tags = []
-        for e in sorted(entities, key=lambda x: x.get("confidenceScore", 0), reverse=True):
+        # confidence順に並べてタグ化
+        for e in sorted(entities, key=lambda x: x.get("confidenceScore",0), reverse=True):
             tag = e.get("entityId") or e.get("matchedText")
             if tag:
                 tag = tag.replace(" ", "")
                 if tag not in tags:
                     tags.append(tag)
+        # 単語から補完
         if len(tags) < 5:
             for w in data_json.get("response", {}).get("words", []):
                 tag = w.get("token")
@@ -74,6 +81,7 @@ def generate_hashtags(text):
                         tags.append(tag)
                 if len(tags) >= 5:
                     break
+        # 数字を含むタグは除外
         tags = [t for t in tags if not any(c.isdigit() for c in t)]
         if not tags:
             return "#タイ #ニュース"
@@ -85,52 +93,24 @@ def generate_hashtags(text):
 # --- RSS処理 ---
 for entry in entries_to_process:
     title = entry.title
-    google_url = entry.link
+    url = entry.link
 
     try:
-        # Googleニュース中継ページを開く
-        driver.get(google_url)
-        time.sleep(3)  # JSでリダイレクトされるのを待つ
-
-        # 本物の記事URLを取得
+        driver.get(url)
+        time.sleep(2)
         original_url = driver.current_url
-
-        # 除外ドメインチェック
-        if any(domain in original_url for domain in EXCLUDE_DOMAINS):
-            print(f"除外スキップ: {title} → {original_url}")
-            continue
-
-        # 本記事ページを開く
-        driver.get(original_url)
-        time.sleep(3)  # ページ内画像の読み込み待機
 
         image_url = None
         description = None
 
-        # 1️⃣ og:image を取得
         try:
             og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
             image_url = og_image_element.get_attribute("content")
-            if not image_url or not image_url.lower().endswith(VALID_EXTENSIONS):
+            if (not image_url or not image_url.lower().endswith(VALID_EXTENSIONS) or not image_url.startswith("https://")):
                 image_url = None
         except:
             image_url = None
 
-        # 2️⃣ og:image が無ければページ内 img タグから取得（最初の有効画像）
-        if not image_url:
-            try:
-                img_elements = driver.find_elements(
-                    "xpath", "//img[contains(@src,'.jpg') or contains(@src,'.png') or contains(@src,'.jpeg')]"
-                )
-                for img in img_elements:
-                    src = img.get_attribute("src")
-                    if src and src.startswith("http"):
-                        image_url = src
-                        break
-            except:
-                image_url = None
-
-        # description を取得
         try:
             desc_element = driver.find_element("xpath", "//meta[@name='description']")
             description = desc_element.get_attribute("content")
@@ -139,19 +119,18 @@ for entry in entries_to_process:
 
     except Exception as e:
         print(f"Error fetching URL for {title}: {e}")
+        original_url = url
         image_url = None
         description = None
-        original_url = google_url
 
-    # 画像がある場合のみスプレッドシートに追加
     if image_url and original_url not in existing_urls:
         description = description or ""
         hashtags = generate_hashtags(title)
         sheet.append_row([title, original_url, hashtags, description, image_url])
         existing_urls.append(original_url)
-        print(f"✅ 追加: {title} → {original_url} / {image_url}")
+        print(f"追加: {title} → {original_url} / {image_url} / {description} / {hashtags}")
     else:
-        print(f"⏭ スキップ: {title}（画像なし/既存）")
+        print(f"スキップ: {title}（og:imageなし/Instagram非対応/既存）")
 
 driver.quit()
-print("✅ 最新ニュースから画像・description・ハッシュタグをスプレッドシートに追加しました。")
+print("最新ニュースから og:image と description とハッシュタグをスプレッドシートに追加しました。")
