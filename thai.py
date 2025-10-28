@@ -28,7 +28,7 @@ existing_urls = existing_urls[1:] if existing_urls else []
 # --- RSSフィード ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
 feed = feedparser.parse(rss_url)
-entries_to_process = feed.entries[:30][::-1]  # 最新20件を古い順に
+entries_to_process = feed.entries[:50][::-1]  # 最新20件を古い順に
 
 # --- Selenium セットアップ ---
 options = Options()
@@ -144,3 +144,4 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新ニュースから og:image と description とハッシュタグをスプレッドシートに追加しました。")
+
