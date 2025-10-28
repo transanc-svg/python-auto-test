@@ -28,7 +28,7 @@ existing_urls = existing_urls[1:] if existing_urls else []
 # --- RSSフィード ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
 feed = feedparser.parse(rss_url)
-entries_to_process = feed.entries[:50][::-1]  # 最新20件を古い順に
+entries_to_process = feed.entries[:20][::-1]  # 最新20件を古い順に
 
 # --- Selenium セットアップ ---
 options = Options()
@@ -41,7 +41,7 @@ if not existing_urls:
     sheet.append_row(["タイトル", "URL", "C列", "D列(description)", "画像URL(E列)"])
 
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
-EXCLUDE_DOMAINS = ["jp.fashionnetwork.com"]
+EXCLUDE_DOMAINS = ["jp.fashionnetwork.com","newscast.jp","www.keidanren.or.jp","ashu-aseanstatistics.com"]
 
 # --- TextRazor APIキー ---
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
@@ -144,4 +144,3 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新ニュースから og:image と description とハッシュタグをスプレッドシートに追加しました。")
-
