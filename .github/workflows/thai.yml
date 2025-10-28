@@ -2,9 +2,8 @@ name: Run thai
 
 on:
   schedule:
-    # UTCで23時, 1時, 3時, 5時, 7時, 9時, 11時, 13時
-    - cron: "0 23 * * *"
-    - cron: "0 1-13/2 * * *"
+    # UTC時間で 23時〜13時 → JSTで 8時〜22時 に相当
+    - cron: "0 23,0-13 * * *"
   workflow_dispatch:
 
 jobs:
