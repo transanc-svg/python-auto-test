@@ -8,7 +8,7 @@ from google.oauth2.service_account import Credentials
 RSS_URL = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP:ja"
 
 # スプレッドシート情報
-SPREADSHEET_ID = "あなたのスプレッドシートID"  # URLの /d/ 〜 /edit の部分だけ
+SPREADSHEET_ID = "1m9mYYpfonBFSILYUTLqUsF4bJEj6Srs4N3lMxPG1ZhA"  # URLの /d/ 〜 /edit の部分だけ
 SHEET_NAME = "シート1"
 
 # GitHub Secrets から認証情報を取得
@@ -38,3 +38,4 @@ for entry in feed.entries:
     worksheet.append_row([title, link, desc])
 
 print("✅ 完了：スプレッドシートにニュースを書き出しました！")
+
