@@ -50,10 +50,7 @@ TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096c166561c9cfb85bc36b44c1c16c8b8a2"
 def generate_hashtags(text):
     url = "https://api.textrazor.com/"
     payload = {"text": text, "extractors": "entities,topics,words"}
-    headers = {
-        "X-TextRazor-Key": TEXTRAZOR_API_KEY,
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
+    headers = {"X-TextRazor-Key": TEXTRAZOR_API_KEY, "Content-Type": "application/x-www-form-urlencoded"}
     data = "&".join([f"{k}={requests.utils.quote(v)}" for k, v in payload.items()])
     try:
         res = requests.post(url, headers=headers, data=data, timeout=10)
@@ -91,16 +88,12 @@ for entry in entries_to_process:
     google_url = entry.link
 
     try:
-        # Googleニュースの中継URLを開く
+        # Googleニュース中継ページを開く
         driver.get(google_url)
-        time.sleep(2)
+        time.sleep(3)  # JSでリダイレクトされるのを待つ
 
-        # 本物の記事URLを取得（最初のリンク）
-        try:
-            article_element = driver.find_element("css selector", "article a")
-            original_url = article_element.get_attribute("href")
-        except:
-            original_url = google_url
+        # 本物の記事URLを取得
+        original_url = driver.current_url
 
         # 除外ドメインチェック
         if any(domain in original_url for domain in EXCLUDE_DOMAINS):
@@ -109,7 +102,7 @@ for entry in entries_to_process:
 
         # 本記事ページを開く
         driver.get(original_url)
-        time.sleep(2)
+        time.sleep(3)  # ページ内画像の読み込み待機
 
         image_url = None
         description = None
@@ -123,15 +116,17 @@ for entry in entries_to_process:
         except:
             image_url = None
 
-        # 2️⃣ og:image がない場合はページ内 img タグから取得
+        # 2️⃣ og:image が無ければページ内 img タグから取得（最初の有効画像）
         if not image_url:
             try:
-                img_element = driver.find_element(
+                img_elements = driver.find_elements(
                     "xpath", "//img[contains(@src,'.jpg') or contains(@src,'.png') or contains(@src,'.jpeg')]"
                 )
-                img_src = img_element.get_attribute("src")
-                if img_src and img_src.startswith("http"):
-                    image_url = img_src
+                for img in img_elements:
+                    src = img.get_attribute("src")
+                    if src and src.startswith("http"):
+                        image_url = src
+                        break
             except:
                 image_url = None
 
