@@ -26,7 +26,7 @@ existing_urls = sheet.col_values(2)  # B列
 existing_urls = existing_urls[1:] if existing_urls else []
 
 # --- RSSフィード ---
-rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
+rss_url = "https://news.google.com/rss/search?hl=ja&gl=JP&ceid=JP%3Aja&oc=11&q=intitle%3A%E3%82%BF%E3%82%A4"
 feed = feedparser.parse(rss_url)
 entries_to_process = feed.entries[:20][::-1]  # 最新20件を古い順に
 
@@ -144,3 +144,4 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新ニュースから og:image と description とハッシュタグをスプレッドシートに追加しました。")
+
