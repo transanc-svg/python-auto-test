@@ -1,14 +1,10 @@
 import feedparser
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-import time
 import json
 import os
 import requests
+import time
 
 # --- Google スプレッドシート認証 ---
 scope = ["https://spreadsheets.google.com/feeds",
@@ -21,28 +17,21 @@ client = gspread.authorize(creds)
 spreadsheet_name = "タイ"
 sheet = client.open(spreadsheet_name).sheet1
 
-# --- 既存のURLを取得して重複防止 ---
+# --- 既存URL取得 ---
 existing_urls = sheet.col_values(2)
 existing_urls = existing_urls[1:] if existing_urls else []
 
-# --- RSSフィード ---
+# --- RSS取得 ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 feed = feedparser.parse(rss_url, request_headers=headers)
-entries_to_process = feed.entries[:100][::-1]  # 最新20件を古い順に
+entries = feed.entries[:20][::-1]  # 最新20件を古い順
 
 # --- ヘッダー追加 ---
 if not existing_urls:
     sheet.append_row(["タイトル", "URL", "C列(ハッシュタグ)", "D列(description)", "画像URL(E列)"])
 
-VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
-EXCLUDE_DOMAINS = [
-    "jp.fashionnetwork.com",
-    "newscast.jp",
-    "www.keidanren.or.jp",
-    "ashu-aseanstatistics.com"
-]
-
+# --- TextRazor API設定 ---
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
 
 def generate_hashtags(text):
@@ -80,70 +69,37 @@ def generate_hashtags(text):
         print(f"TextRazor API error: {e}")
         return "#タイ #ニュース"
 
-# --- Seleniumセットアップ（ヘッドレス） ---
-options = Options()
-options.add_argument('--headless')
-options.add_argument('--disable-gpu')
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
 # --- RSS処理 ---
-for entry in entries_to_process:
+for entry in entries:
     title = entry.title
-    google_url = entry.link
+    url = entry.link
+    description = getattr(entry, "summary", "")
 
-    if any(domain in google_url for domain in EXCLUDE_DOMAINS):
-        print(f"除外スキップ: {title} → {google_url}")
-        continue
-    if google_url in existing_urls:
-        print(f"既存スキップ: {title} → {google_url}")
-        continue
-
-    try:
-        driver.get(google_url)
-        time.sleep(2)
-        original_url = driver.current_url
-
-        if any(domain in original_url for domain in EXCLUDE_DOMAINS):
-            print(f"除外スキップ: {title} → {original_url}")
-            continue
-
-        # og:image取得
-        image_url = None
-        try:
-            og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
-            image_url = og_image_element.get_attribute("content")
-            if (not image_url or not image_url.lower().endswith(VALID_EXTENSIONS) or not image_url.startswith("https://")):
-                image_url = None
-        except:
-            image_url = None
-
-        # 画像が無ければスキップ
-        if not image_url:
-            print(f"スキップ（画像なし）: {title}")
-            continue
-
-        # description取得
-        description = ""
-        try:
-            desc_element = driver.find_element("xpath", "//meta[@name='description']")
-            description = desc_element.get_attribute("content")
-        except:
-            description = ""
-
-    except Exception as e:
-        print(f"Error fetching URL for {title}: {e}")
-        original_url = google_url
-        image_url = None
-        description = ""
+    # 重複URLはスキップ
+    if url in existing_urls:
+        print(f"既存スキップ: {title}")
         continue
 
+    # 画像URL取得
+    image_url = None
+    if hasattr(entry, "media_thumbnail"):
+        image_url = entry.media_thumbnail[0].get("url")
+    elif hasattr(entry, "media_content"):
+        image_url = entry.media_content[0].get("url")
+
+    # 画像がない場合はスキップ
+    if not image_url:
+        print(f"スキップ（画像なし）: {title}")
+        continue
+
+    # ハッシュタグ生成
     hashtags = generate_hashtags(title)
-    sheet.append_row([title, original_url, hashtags, description, image_url])
-    existing_urls.append(original_url)
-    print(f"追加: {title} → {original_url} / {image_url} / {hashtags}")
+
+    # スプレッドシートに書き込み
+    sheet.append_row([title, url, hashtags, description, image_url])
+    existing_urls.append(url)
+    print(f"追加: {title} → {url} / {image_url} / {hashtags}")
 
     time.sleep(1.2)  # TextRazor APIレート制限対策
 
-driver.quit()
-print("RSSからオリジナルURLの og:image・description・ハッシュタグをスプレッドシートに書き込み完了。")
-
+print("RSSから画像付き記事をスプレッドシートに書き込み完了。")
