@@ -7,36 +7,38 @@ import os
 # --- Google スプレッドシート認証 ---
 scope = ["https://spreadsheets.google.com/feeds",
          "https://www.googleapis.com/auth/drive"]
-google_creds = os.environ["GOOGLE_CREDENTIALS"]
+
+# 環境変数からJSON読み込み
+google_creds = os.environ.get("GOOGLE_CREDENTIALS")
+if not google_creds:
+    raise Exception("環境変数 GOOGLE_CREDENTIALS が設定されていません")
+
 creds_dict = json.loads(google_creds)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
-sheet = client.open("タイ").sheet1
+# --- シートを開く ---
+spreadsheet_name = "タイ"
+sheet = client.open(spreadsheet_name).sheet1
 
-# --- 既存URL取得（重複防止） ---
-existing_urls = sheet.col_values(2)
-existing_urls = existing_urls[1:] if existing_urls else []
-
-# --- RSS取得 ---
+# --- テスト用RSS ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
-feed = feedparser.parse(rss_url)
-entries = feed.entries[:20][::-1]
 
-# --- ヘッダー追加 ---
-if not existing_urls:
-    sheet.append_row(["タイトル", "リンク"])
+# RSS取得（User-Agent 指定）
+feed = feedparser.parse(rss_url, request_headers={'User-Agent': 'Mozilla/5.0'})
 
-# --- RSS処理 ---
-for entry in entries:
-    title = entry.title
-    url = entry.link
+print(f"取得記事件数: {len(feed.entries)}")
+if len(feed.entries) == 0:
+    print("RSSが取得できません。URLや接続を確認してください。")
+else:
+    # 最初の3件を表示
+    for entry in feed.entries[:3]:
+        print("タイトル:", entry.title)
+        print("リンク:", entry.link)
 
-    if url in existing_urls:
-        continue
-
-    sheet.append_row([title, url])
-    existing_urls.append(url)
-    print(f"追加: {title} → {url}")
-
-print("RSSのタイトルとリンクを書き出し完了。")
+# --- スプレッドシートにテスト書き込み ---
+try:
+    sheet.append_row(["テストタイトル", "https://example.com"])
+    print("スプレッドシート書き込み成功")
+except Exception as e:
+    print("スプレッドシート書き込み失敗:", e)
