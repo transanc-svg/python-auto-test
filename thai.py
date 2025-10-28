@@ -29,7 +29,7 @@ existing_urls = existing_urls[1:] if existing_urls else []
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
 feed = feedparser.parse(rss_url, request_headers=headers)
-entries_to_process = feed.entries[:20][::-1]  # 最新20件を古い順に
+entries_to_process = feed.entries[:100][::-1]  # 最新20件を古い順に
 
 # --- ヘッダー追加 ---
 if not existing_urls:
@@ -146,3 +146,4 @@ for entry in entries_to_process:
 
 driver.quit()
 print("RSSからオリジナルURLの og:image・description・ハッシュタグをスプレッドシートに書き込み完了。")
+
