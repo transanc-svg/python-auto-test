@@ -44,7 +44,7 @@ VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
 EXCLUDE_DOMAINS = ["jp.fashionnetwork.com", "newscast.jp", "www.keidanren.or.jp", "ashu-aseanstatistics.com"]
 
 # --- TextRazor APIキー ---
-TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
+TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096c166561c9cfb85bc36b44c1c16c8b8a2"
 
 # --- TextRazorでハッシュタグ生成 ---
 def generate_hashtags(text):
@@ -111,7 +111,10 @@ for entry in entries_to_process:
         driver.get(original_url)
         time.sleep(2)
 
-        # og:image を取得
+        image_url = None
+        description = None
+
+        # 1️⃣ og:image を取得
         try:
             og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
             image_url = og_image_element.get_attribute("content")
@@ -119,6 +122,18 @@ for entry in entries_to_process:
                 image_url = None
         except:
             image_url = None
+
+        # 2️⃣ og:image がない場合はページ内 img タグから取得
+        if not image_url:
+            try:
+                img_element = driver.find_element(
+                    "xpath", "//img[contains(@src,'.jpg') or contains(@src,'.png') or contains(@src,'.jpeg')]"
+                )
+                img_src = img_element.get_attribute("src")
+                if img_src and img_src.startswith("http"):
+                    image_url = img_src
+            except:
+                image_url = None
 
         # description を取得
         try:
@@ -133,15 +148,15 @@ for entry in entries_to_process:
         description = None
         original_url = google_url
 
-    # Instagram用の画像がある場合のみ追加
+    # 画像がある場合のみスプレッドシートに追加
     if image_url and original_url not in existing_urls:
         description = description or ""
         hashtags = generate_hashtags(title)
         sheet.append_row([title, original_url, hashtags, description, image_url])
         existing_urls.append(original_url)
-        print(f"✅ 追加: {title} → {original_url}")
+        print(f"✅ 追加: {title} → {original_url} / {image_url}")
     else:
-        print(f"⏭ スキップ: {title}（og:imageなし/Instagram非対応/既存）")
+        print(f"⏭ スキップ: {title}（画像なし/既存）")
 
 driver.quit()
-print("✅ 最新ニュースから og:image・description・ハッシュタグをスプレッドシートに追加しました。")
+print("✅ 最新ニュースから画像・description・ハッシュタグをスプレッドシートに追加しました。")
