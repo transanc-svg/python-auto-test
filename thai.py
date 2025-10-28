@@ -5,7 +5,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # === Google Sheets設定 ===
-SPREADSHEET_ID = "https://docs.google.com/spreadsheets/d/1m9mYYpfonBFSILYUTLqUsF4bJEj6Srs4N3lMxPG1ZhA/edit?gid=0#gid=0"
+SPREADSHEET_ID = "1m9mYYpfonBFSILYUTLqUsF4bJEj6Srs4N3lMxPG1ZhA"
+"
 SHEET_NAME = "シート1"
 
 # === RSS URL ===
@@ -40,3 +41,4 @@ for entry in feed.entries:
     worksheet.append_row([title, link, description])
 
 print("✅ 完了：スプレッドシートに書き込みました！")
+
