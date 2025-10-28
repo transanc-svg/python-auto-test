@@ -9,7 +9,7 @@ RSS_URL = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTV
 
 # スプレッドシートの設定
 SPREADSHEET_ID = "1m9mYYpfonBFSILYUTLqUsF4bJEj6Srs4N3lMxPG1ZhA"  # スプレッドシートの ID を入力
-SHEET_NAME = "シート１"  # シート名を入力
+SHEET_NAME = "シート1"  # シート名を入力
 
 # Google Cloud のサービスアカウント認証情報を環境変数から取得
 google_credentials = json.loads(os.environ["GOOGLE_CREDENTIALS"])
@@ -43,4 +43,5 @@ for entry in feed.entries:
     worksheet.append_row([title, link, description])
 
 print("✅ 完了：スプレッドシートにニュースを書き出しました！")
+
 
