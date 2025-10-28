@@ -144,8 +144,3 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新ニュースから og:image と description とハッシュタグをスプレッドシートに追加しました。")
-
-
-
-
-
