@@ -1,14 +1,10 @@
 import feedparser
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-import time
 import json
 import os
 import requests
+import time
 
 # --- Google スプレッドシート認証 ---
 scope = ["https://spreadsheets.google.com/feeds",
@@ -30,19 +26,18 @@ rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTV
 feed = feedparser.parse(rss_url)
 entries_to_process = feed.entries[:20][::-1]  # 最新20件を古い順に
 
-# --- Selenium セットアップ ---
-options = Options()
-options.add_argument('--headless')
-options.add_argument('--disable-gpu')
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-
 # --- ヘッダー追加 ---
 if not existing_urls:
-    sheet.append_row(["タイトル", "URL", "C列", "D列(description)", "画像URL(E列)"])
+    sheet.append_row(["タイトル", "URL", "C列(ハッシュタグ)", "D列(description)", "画像URL(E列)"])
 
 VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
+EXCLUDE_DOMAINS = [
+    "jp.fashionnetwork.com",
+    "newscast.jp",
+    "www.keidanren.or.jp",
+    "ashu-aseanstatistics.com"
+]
 
-# --- TextRazor APIキー ---
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
 
 def generate_hashtags(text):
@@ -64,14 +59,12 @@ def generate_hashtags(text):
         data_json = res.json()
         entities = data_json.get("response", {}).get("entities", [])
         tags = []
-        # confidence順に並べてタグ化
         for e in sorted(entities, key=lambda x: x.get("confidenceScore",0), reverse=True):
             tag = e.get("entityId") or e.get("matchedText")
             if tag:
                 tag = tag.replace(" ", "")
                 if tag not in tags:
                     tags.append(tag)
-        # 単語から補完
         if len(tags) < 5:
             for w in data_json.get("response", {}).get("words", []):
                 tag = w.get("token")
@@ -81,7 +74,6 @@ def generate_hashtags(text):
                         tags.append(tag)
                 if len(tags) >= 5:
                     break
-        # 数字を含むタグは除外
         tags = [t for t in tags if not any(c.isdigit() for c in t)]
         if not tags:
             return "#タイ #ニュース"
@@ -95,42 +87,30 @@ for entry in entries_to_process:
     title = entry.title
     url = entry.link
 
-    try:
-        driver.get(url)
-        time.sleep(2)
-        original_url = driver.current_url
+    if any(domain in url for domain in EXCLUDE_DOMAINS):
+        print(f"除外スキップ: {title} → {url}")
+        continue
+    if url in existing_urls:
+        print(f"既存スキップ: {title} → {url}")
+        continue
 
+    description = entry.get("description", "")
+
+    # media:thumbnail または media:content から画像取得
+    image_url = None
+    if "media_thumbnail" in entry:
+        image_url = entry.media_thumbnail[0].get("url")
+    elif "media_content" in entry:
+        image_url = entry.media_content[0].get("url")
+    # Instagram対応拡張子チェック
+    if image_url and not image_url.lower().endswith(VALID_EXTENSIONS):
         image_url = None
-        description = None
 
-        try:
-            og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
-            image_url = og_image_element.get_attribute("content")
-            if (not image_url or not image_url.lower().endswith(VALID_EXTENSIONS) or not image_url.startswith("https://")):
-                image_url = None
-        except:
-            image_url = None
+    hashtags = generate_hashtags(title)
+    sheet.append_row([title, url, hashtags, description, image_url])
+    existing_urls.append(url)
+    print(f"追加: {title} → {url} / {image_url} / {hashtags}")
 
-        try:
-            desc_element = driver.find_element("xpath", "//meta[@name='description']")
-            description = desc_element.get_attribute("content")
-        except:
-            description = None
+    time.sleep(1.2)  # TextRazor APIレート制限対策
 
-    except Exception as e:
-        print(f"Error fetching URL for {title}: {e}")
-        original_url = url
-        image_url = None
-        description = None
-
-    if image_url and original_url not in existing_urls:
-        description = description or ""
-        hashtags = generate_hashtags(title)
-        sheet.append_row([title, original_url, hashtags, description, image_url])
-        existing_urls.append(original_url)
-        print(f"追加: {title} → {original_url} / {image_url} / {description} / {hashtags}")
-    else:
-        print(f"スキップ: {title}（og:imageなし/Instagram非対応/既存）")
-
-driver.quit()
-print("最新ニュースから og:image と description とハッシュタグをスプレッドシートに追加しました。")
+print("RSSからタイトル・description・画像・ハッシュタグをスプレッドシートに書き込み完了。")
