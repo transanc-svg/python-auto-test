@@ -22,13 +22,14 @@ spreadsheet_name = "タイ"
 sheet = client.open(spreadsheet_name).sheet1
 
 # --- 既存のURLを取得して重複防止 ---
-existing_urls = sheet.col_values(2)  # B列
+existing_urls = sheet.col_values(2)
 existing_urls = existing_urls[1:] if existing_urls else []
 
 # --- RSSフィード ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
-feed = feedparser.parse(rss_url)
-entries_to_process = feed.entries[:50][::-1]  # 最新20件を古い順に
+headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+feed = feedparser.parse(rss_url, request_headers=headers)
+entries_to_process = feed.entries[:20][::-1]  # 最新20件を古い順に
 
 # --- ヘッダー追加 ---
 if not existing_urls:
@@ -45,7 +46,6 @@ EXCLUDE_DOMAINS = [
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
 
 def generate_hashtags(text):
-    """TextRazor APIでハッシュタグ生成"""
     url = "https://api.textrazor.com/"
     payload = {"text": text, "extractors": "entities,topics,words"}
     headers = {"X-TextRazor-Key": TEXTRAZOR_API_KEY, "Content-Type": "application/x-www-form-urlencoded"}
@@ -91,7 +91,6 @@ for entry in entries_to_process:
     title = entry.title
     google_url = entry.link
 
-    # 除外ドメインチェック
     if any(domain in google_url for domain in EXCLUDE_DOMAINS):
         print(f"除外スキップ: {title} → {google_url}")
         continue
@@ -101,7 +100,7 @@ for entry in entries_to_process:
 
     try:
         driver.get(google_url)
-        time.sleep(2)  # ページ読み込み待ち
+        time.sleep(2)
         original_url = driver.current_url
 
         if any(domain in original_url for domain in EXCLUDE_DOMAINS):
@@ -118,6 +117,11 @@ for entry in entries_to_process:
         except:
             image_url = None
 
+        # 画像が無ければスキップ
+        if not image_url:
+            print(f"スキップ（画像なし）: {title}")
+            continue
+
         # description取得
         description = ""
         try:
@@ -131,10 +135,6 @@ for entry in entries_to_process:
         original_url = google_url
         image_url = None
         description = ""
-
-    # 画像が無ければ書き込まない
-    if not image_url:
-        print(f"スキップ（画像なし）: {title}")
         continue
 
     hashtags = generate_hashtags(title)
@@ -142,7 +142,7 @@ for entry in entries_to_process:
     existing_urls.append(original_url)
     print(f"追加: {title} → {original_url} / {image_url} / {hashtags}")
 
-    time.sleep(1.2)  # TextRazor API制限対策
+    time.sleep(1.2)  # TextRazor APIレート制限対策
 
 driver.quit()
-print("RSSから og:image・description・ハッシュタグをスプレッドシートに書き込み完了。")
+print("RSSからオリジナルURLの og:image・description・ハッシュタグをスプレッドシートに書き込み完了。")
