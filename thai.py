@@ -23,7 +23,8 @@ existing_urls = existing_urls[1:] if existing_urls else []
 
 # --- RSSフィード ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
-feed = feedparser.parse(rss_url)
+headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+feed = feedparser.parse(rss_url, request_headers=headers)
 entries_to_process = feed.entries[:20][::-1]  # 最新20件を古い順に
 
 # --- ヘッダー追加 ---
@@ -98,13 +99,19 @@ for entry in entries_to_process:
 
     # media:thumbnail または media:content から画像取得
     image_url = None
-    if "media_thumbnail" in entry:
+    if hasattr(entry, "media_thumbnail"):
         image_url = entry.media_thumbnail[0].get("url")
-    elif "media_content" in entry:
+    elif hasattr(entry, "media_content"):
         image_url = entry.media_content[0].get("url")
+
     # Instagram対応拡張子チェック
     if image_url and not image_url.lower().endswith(VALID_EXTENSIONS):
         image_url = None
+
+    # 画像が無ければ書き込まない
+    if not image_url:
+        print(f"スキップ（画像なし）: {title}")
+        continue
 
     hashtags = generate_hashtags(title)
     sheet.append_row([title, url, hashtags, description, image_url])
