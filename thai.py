@@ -46,23 +46,8 @@ EXCLUDE_DOMAINS = ["jp.fashionnetwork.com", "newscast.jp", "www.keidanren.or.jp"
 # --- TextRazor APIキー ---
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
 
-
-# --- Googleニュースの中継URLを実際の記事URLに変換 ---
-def resolve_google_news_url(url):
-    """Googleニュースの中継URLを実際の記事URLにリダイレクト解決"""
-    if "news.google.com" in url:
-        try:
-            res = requests.get(url, allow_redirects=True, timeout=10)
-            return res.url
-        except Exception as e:
-            print(f"resolve_google_news_url error: {e}")
-            return url
-    return url
-
-
 # --- TextRazorでハッシュタグ生成 ---
 def generate_hashtags(text):
-    """TextRazor APIでハッシュタグ生成"""
     url = "https://api.textrazor.com/"
     payload = {"text": text, "extractors": "entities,topics,words"}
     headers = {
@@ -100,32 +85,42 @@ def generate_hashtags(text):
         print(f"TextRazor API error: {e}")
         return "#タイ #ニュース"
 
-
 # --- RSS処理 ---
 for entry in entries_to_process:
     title = entry.title
     google_url = entry.link
-    original_url = resolve_google_news_url(google_url)  # ← 実URLに変換
-
-    if any(domain in original_url for domain in EXCLUDE_DOMAINS):
-        print(f"除外スキップ: {title} → {original_url}")
-        continue
 
     try:
+        # Googleニュースの中継URLを開く
+        driver.get(google_url)
+        time.sleep(2)
+
+        # 本物の記事URLを取得（最初のリンク）
+        try:
+            article_element = driver.find_element("css selector", "article a")
+            original_url = article_element.get_attribute("href")
+        except:
+            original_url = google_url
+
+        # 除外ドメインチェック
+        if any(domain in original_url for domain in EXCLUDE_DOMAINS):
+            print(f"除外スキップ: {title} → {original_url}")
+            continue
+
+        # 本記事ページを開く
         driver.get(original_url)
         time.sleep(2)
 
-        image_url = None
-        description = None
-
+        # og:image を取得
         try:
             og_image_element = driver.find_element("xpath", "//meta[@property='og:image']")
             image_url = og_image_element.get_attribute("content")
-            if (not image_url or not image_url.lower().endswith(VALID_EXTENSIONS) or not image_url.startswith("https://")):
+            if not image_url or not image_url.lower().endswith(VALID_EXTENSIONS):
                 image_url = None
         except:
             image_url = None
 
+        # description を取得
         try:
             desc_element = driver.find_element("xpath", "//meta[@name='description']")
             description = desc_element.get_attribute("content")
@@ -136,8 +131,9 @@ for entry in entries_to_process:
         print(f"Error fetching URL for {title}: {e}")
         image_url = None
         description = None
+        original_url = google_url
 
-    # --- 書き込み ---
+    # Instagram用の画像がある場合のみ追加
     if image_url and original_url not in existing_urls:
         description = description or ""
         hashtags = generate_hashtags(title)
@@ -145,7 +141,7 @@ for entry in entries_to_process:
         existing_urls.append(original_url)
         print(f"✅ 追加: {title} → {original_url}")
     else:
-        print(f"⏭ スキップ: {title}（og:imageなし/Instagram非対応/httpsなし/既存）")
+        print(f"⏭ スキップ: {title}（og:imageなし/Instagram非対応/既存）")
 
 driver.quit()
 print("✅ 最新ニュースから og:image・description・ハッシュタグをスプレッドシートに追加しました。")
