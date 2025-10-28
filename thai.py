@@ -1,38 +1,40 @@
+import json
+import os
 import feedparser
 import gspread
 from google.oauth2.service_account import Credentials
 
-# === Google Sheets設定 ===
-SPREADSHEET_ID = "1m9mYYpfonBFSILYUTLqUsF4bJEj6Srs4N3lMxPG1ZhA"
+# GoogleニュースRSSのURL
+RSS_URL = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP:ja"
+
+# スプレッドシート情報
+SPREADSHEET_ID = "あなたのスプレッドシートID"  # URLの /d/ 〜 /edit の部分だけ
 SHEET_NAME = "シート1"
 
-# === RSS URL ===
-RSS_URL = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja"
+# GitHub Secrets から認証情報を取得
+google_credentials = json.loads(os.environ["GOOGLE_CREDENTIALS"])
 
-# === 認証設定 ===
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
-creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPES)
+creds = Credentials.from_service_account_info(google_credentials, scopes=SCOPES)
 gc = gspread.authorize(creds)
-
-# === シート取得 ===
 sh = gc.open_by_key(SPREADSHEET_ID)
 worksheet = sh.worksheet(SHEET_NAME)
 
-# === RSSを取得 ===
+# RSSを読み込み
 feed = feedparser.parse(RSS_URL)
 
-# === シートをクリアして見出し追加 ===
+# シートをクリアしてヘッダー追加
 worksheet.clear()
-worksheet.append_row(["タイトル", "URL", "説明文"])
+worksheet.append_row(["title", "url", "description"])
 
-# === 各ニュースを追加 ===
+# ニュースを書き込み
 for entry in feed.entries:
     title = entry.title
     link = entry.link
-    description = getattr(entry, "summary", "")
-    worksheet.append_row([title, link, description])
+    desc = entry.get("description", "")
+    worksheet.append_row([title, link, desc])
 
-print("✅ 完了：スプレッドシートに書き込みました！")
+print("✅ 完了：スプレッドシートにニュースを書き出しました！")
