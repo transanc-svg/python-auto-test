@@ -1,8 +1,12 @@
-import feedparser
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import os
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+import time
 import json
+import os
 import requests
 
 # --- Google スプレッドシート認証 ---
@@ -20,28 +24,26 @@ sheet = client.open(spreadsheet_name).sheet1
 existing_urls = sheet.col_values(2)
 existing_urls = existing_urls[1:] if existing_urls else []
 
-# --- RSSフィード ---
-rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
+# --- Selenium セットアップ ---
+options = Options()
+options.add_argument('--headless')
+options.add_argument('--disable-gpu')
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
-# User-Agent指定でRSSを取得
-headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-feed = feedparser.parse(rss_url, request_headers=headers)
-entries_to_process = feed.entries[::-1]  # 古い順に処理
+# --- Googleニュース トピックスページ ---
+google_news_url = "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRFZ4ZERBU0Ftb0Jna0FQAQ?hl=ja&gl=JP&ceid=JP:ja"
+driver.get(google_news_url)
+time.sleep(3)
 
-print(f"📌 RSS取得件数: {len(entries_to_process)}")
-if len(entries_to_process) == 0:
-    print("⚠ RSS取得失敗: User-Agent変更でも取得できませんでした。")
+# --- 記事を取得 ---
+articles = driver.find_elements("xpath", "//article//h3/a")
+print(f"📌 記事取得件数: {len(articles)}")
 
-# --- ヘッダー追加 ---
-if not existing_urls:
-    sheet.append_row(["タイトル", "URL", "ハッシュタグ", "説明", "画像URL"])
-
-# --- TextRazor APIキー ---
+# --- TextRazor API ---
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
 FALLBACK_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg"
 
 def generate_hashtags(text):
-    """TextRazor APIでハッシュタグ生成"""
     url = "https://api.textrazor.com/"
     payload = {"text": text, "extractors": "entities,topics,words"}
     headers = {"X-TextRazor-Key": TEXTRAZOR_API_KEY, "Content-Type": "application/x-www-form-urlencoded"}
@@ -74,46 +76,49 @@ def generate_hashtags(text):
         print(f"TextRazor API error: {e}")
         return "#タイ #ニュース"
 
-# --- RSS処理 ---
-for i, entry in enumerate(entries_to_process, 1):
-    title = entry.title
-    url = entry.link
-    description = getattr(entry, "summary", "")
+# --- ヘッダー追加 ---
+if not existing_urls:
+    sheet.append_row(["タイトル", "URL", "ハッシュタグ", "説明", "画像URL"])
 
-    # --- 画像取得（RSS内の media:content や media:thumbnail があれば使用） ---
-    image_url = None
-    if 'media_content' in entry:
-        media = entry.media_content
-        if media and isinstance(media, list):
-            image_url = media[0].get('url')
-    if not image_url and 'media_thumbnail' in entry:
-        media = entry.media_thumbnail
-        if media and isinstance(media, list):
-            image_url = media[0].get('url')
-    if not image_url:
+# --- 記事ごとにスプレッドシートに追加 ---
+for i, article in enumerate(articles, 1):
+    try:
+        title = article.text
+        url = article.get_attribute("href")
+
+        if url in existing_urls:
+            print(f"⏭ スキップ（既存URL）: {title}")
+            continue
+
+        # --- 記事ページを開いて description と og:image を取得 ---
+        driver.get(url)
+        time.sleep(2)
+        description = ""
         image_url = FALLBACK_IMAGE_URL
 
-    # --- デバッグ出力 ---
-    print(f"\n[{i}] タイトル: {title}")
-    print(f"    URL: {url}")
-    print(f"    description: {description[:50]}...")
-    print(f"    画像URL: {image_url}")
-    print(f"    既存URL判定: {url in existing_urls}")
+        try:
+            desc_element = driver.find_element("xpath", "//meta[@name='description']")
+            description = desc_element.get_attribute("content") or ""
+        except:
+            description = ""
 
-    # --- 重複チェック ---
-    if url in existing_urls:
-        print(f"⏭ スキップ（既存URL）")
-        continue
+        try:
+            img_element = driver.find_element("xpath", "//meta[@property='og:image']")
+            img = img_element.get_attribute("content")
+            if img and img.startswith("http"):
+                image_url = img
+        except:
+            image_url = FALLBACK_IMAGE_URL
 
-    hashtags = generate_hashtags(title)
-    print(f"    hashtags: {hashtags}")
+        hashtags = generate_hashtags(title)
 
-    # --- スプレッドシート書き込み ---
-    try:
+        # --- スプレッドシートに追加 ---
         sheet.append_row([title, url, hashtags, description, image_url])
         existing_urls.append(url)
-        print(f"✅ 追加成功")
-    except Exception as e:
-        print(f"❌ 書き込み失敗 → {e}")
+        print(f"✅ 追加成功: {title}")
 
-print("\n🎉 デバッグ完了: RSS記事のスプレッドシート追加終了")
+    except Exception as e:
+        print(f"❌ 記事処理失敗: {e}")
+
+driver.quit()
+print("🎉 Googleニュース記事をスプレッドシートに追加完了")
