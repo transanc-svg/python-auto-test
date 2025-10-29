@@ -4,6 +4,9 @@ from oauth2client.service_account import ServiceAccountCredentials
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 import json
@@ -11,33 +14,22 @@ import os
 import requests
 
 # --- Google スプレッドシート認証 ---
-scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+scope = ["https://spreadsheets.google.com/feeds",
+         "https://www.googleapis.com/auth/drive"]
 
 print("🔑 Google認証開始...")
+google_creds = os.environ["GOOGLE_CREDENTIALS"]
+creds_dict = json.loads(google_creds)
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+client = gspread.authorize(creds)
+print("✅ Google認証成功")
 
-try:
-    google_creds = os.environ["GOOGLE_CREDENTIALS"]
-    creds_dict = json.loads(google_creds)
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
-    print("✅ Google認証成功")
-except Exception as e:
-    print("❌ Google認証失敗:", e)
-    exit(1)
-
-# --- スプレッドシート設定 ---
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1m9mYYpfonBFSILYUTLqUsF4bJEj6Srs4N3lMxPG1ZhA/edit"
-try:
-    sheet = client.open_by_url(SPREADSHEET_URL).sheet1
-    print("✅ スプレッドシート接続成功")
-except Exception as e:
-    print("❌ スプレッドシート接続失敗:", e)
-    exit(1)
+spreadsheet_name = "タイ"
+sheet = client.open(spreadsheet_name).sheet1
 
 # --- 既存のURLを取得して重複防止 ---
-existing_urls = sheet.col_values(2)
+existing_urls = sheet.col_values(2)  # B列
 existing_urls = existing_urls[1:] if existing_urls else []
-print(f"📄 既存URL件数: {len(existing_urls)}")
 
 # --- ヘッダー追加 ---
 if not existing_urls:
@@ -46,25 +38,28 @@ if not existing_urls:
 # --- RSSフィード ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
 feed = feedparser.parse(rss_url)
-entries_to_process = feed.entries[:50][::-1]
+entries_to_process = feed.entries[:30][::-1]  # 古い順に最大30件
 
-# --- Seleniumセットアップ ---
-print("🧭 Chromeドライバー起動中...")
+# --- Selenium セットアップ ---
 options = Options()
 options.add_argument('--headless')
 options.add_argument('--disable-gpu')
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-print("✅ Selenium起動成功")
+print("✅ Chrome起動成功")
 
-# --- 定数 ---
-VALID_EXTENSIONS = (".jpg", ".jpeg", ".png")
-EXCLUDE_DOMAINS = ["jp.fashionnetwork.com", "newscast.jp", "www.keidanren.or.jp", "ashu-aseanstatistics.com"]
+VALID_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp")
+EXCLUDE_DOMAINS = [
+    "jp.fashionnetwork.com", "newscast.jp",
+    "www.keidanren.or.jp", "ashu-aseanstatistics.com"
+]
+
+# --- TextRazor APIキー ---
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
 
-# --- TextRazorでハッシュタグ生成 ---
 def generate_hashtags(text):
+    """TextRazor APIでハッシュタグ生成"""
     url = "https://api.textrazor.com/"
     payload = {"text": text, "extractors": "entities,topics,words"}
     headers = {"X-TextRazor-Key": TEXTRAZOR_API_KEY, "Content-Type": "application/x-www-form-urlencoded"}
@@ -85,10 +80,8 @@ def generate_hashtags(text):
         if len(tags) < 5:
             for w in data_json.get("response", {}).get("words", []):
                 tag = w.get("token")
-                if tag:
-                    tag = tag.replace(" ", "")
-                    if tag not in tags:
-                        tags.append(tag)
+                if tag and tag not in tags:
+                    tags.append(tag)
                 if len(tags) >= 5:
                     break
         tags = [t for t in tags if not any(c.isdigit() for c in t)]
@@ -97,66 +90,63 @@ def generate_hashtags(text):
         print(f"TextRazor API error: {e}")
         return "#タイ #ニュース"
 
-# --- テスト書き込み確認 ---
-try:
-    test_row = ["接続テスト", "https://example.com", "#test", "テスト説明", "https://example.com/test.jpg"]
-    sheet.append_row(test_row)
-    print("✅ テスト書き込み成功（スプレッドシート動作確認OK）")
-except Exception as e:
-    print("❌ スプレッドシート書き込みエラー:", e)
-    driver.quit()
-    exit(1)
-
-# --- RSSフィード処理 ---
+# --- RSS処理 ---
 for entry in entries_to_process:
     title = entry.title
     google_url = entry.link
 
     if any(domain in google_url for domain in EXCLUDE_DOMAINS):
-        print(f"⏭ 除外ドメインスキップ: {title}")
+        print(f"除外スキップ: {title} → {google_url}")
         continue
+
+    print(f"▶ {title}")
+    print(f"  URL: {google_url}")
 
     try:
         driver.get(google_url)
-        time.sleep(5)
+        # ページが完全に読み込まれるまで待機
+        WebDriverWait(driver, 10).until(lambda d: d.execute_script("return document.readyState") == "complete")
+        time.sleep(3)
         original_url = driver.current_url
+
         if any(domain in original_url for domain in EXCLUDE_DOMAINS):
-            print(f"⏭ 除外スキップ: {title}")
+            print(f"⏭ 除外スキップ: {original_url}")
             continue
 
         # og:image 取得
         image_url = None
         try:
-            og_image = driver.find_element("xpath", "//meta[@property='og:image']")
-            image_url = og_image.get_attribute("content")
-            if (not image_url or not image_url.lower().endswith(VALID_EXTENSIONS) or not image_url.startswith("https://")):
+            og_image_element = driver.find_element(By.XPATH, "//meta[@property='og:image']")
+            image_url = og_image_element.get_attribute("content")
+            if (not image_url or not image_url.startswith("http")):
                 image_url = None
         except:
             image_url = None
 
         # description 取得
-        description = None
+        description = ""
         try:
-            desc = driver.find_element("xpath", "//meta[@name='description']")
-            description = desc.get_attribute("content")
+            desc_element = driver.find_element(By.XPATH, "//meta[@name='description']")
+            description = desc_element.get_attribute("content") or ""
         except:
             description = ""
 
+        print(f"  画像URL: {image_url}")
+        print(f"  説明: {description[:60]}...")
+        print(f"  リダイレクト後URL: {original_url}")
+
     except Exception as e:
-        print(f"⚠️ URL取得エラー: {title} → {e}")
+        print(f"⚠️ URL処理エラー: {title} → {e}")
         original_url = google_url
         image_url = None
         description = ""
 
-    # --- 書き込み条件 ---
+    # --- 書き込み判定 ---
     if image_url and original_url not in existing_urls:
         hashtags = generate_hashtags(title)
-        try:
-            sheet.append_row([title, original_url, hashtags, description, image_url])
-            existing_urls.append(original_url)
-            print(f"✅ 追加: {title} → {original_url}")
-        except Exception as e:
-            print(f"❌ 書き込み失敗: {title} → {e}")
+        sheet.append_row([title, original_url, hashtags, description, image_url])
+        existing_urls.append(original_url)
+        print(f"✅ 追加: {title}")
     else:
         print(f"⏭ スキップ: {title}（画像なし or 既存URL）")
 
