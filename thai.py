@@ -25,13 +25,14 @@ rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTV
 feed = feedparser.parse(rss_url)
 entries_to_process = feed.entries[::-1]  # 古い順に処理
 
+print(f"📌 RSS取得件数: {len(entries_to_process)}")
+
 # --- ヘッダー追加 ---
 if not existing_urls:
     sheet.append_row(["タイトル", "URL", "ハッシュタグ", "説明", "画像URL"])
 
 # --- TextRazor APIキー ---
 TEXTRAZOR_API_KEY = "fbedccf39739132e30c41096f166561c9cfb85bc36b44c1c16c8b8a2"
-
 FALLBACK_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg"
 
 def generate_hashtags(text):
@@ -69,7 +70,7 @@ def generate_hashtags(text):
         return "#タイ #ニュース"
 
 # --- RSS処理 ---
-for entry in entries_to_process:
+for i, entry in enumerate(entries_to_process, 1):
     title = entry.title
     url = entry.link
     description = getattr(entry, "summary", "")
@@ -87,19 +88,27 @@ for entry in entries_to_process:
     if not image_url:
         image_url = FALLBACK_IMAGE_URL
 
+    # --- デバッグ出力 ---
+    print(f"\n[{i}] タイトル: {title}")
+    print(f"    URL: {url}")
+    print(f"    description: {description[:50]}...")
+    print(f"    画像URL: {image_url}")
+    print(f"    既存URL判定: {url in existing_urls}")
+
     # --- 重複チェック ---
     if url in existing_urls:
-        print(f"⏭ スキップ（既存URL）: {title}")
+        print(f"⏭ スキップ（既存URL）")
         continue
 
     hashtags = generate_hashtags(title)
+    print(f"    hashtags: {hashtags}")
 
     # --- スプレッドシート書き込み ---
     try:
         sheet.append_row([title, url, hashtags, description, image_url])
         existing_urls.append(url)
-        print(f"✅ 追加: {title}")
+        print(f"✅ 追加成功")
     except Exception as e:
-        print(f"❌ 書き込み失敗: {title} → {e}")
+        print(f"❌ 書き込み失敗 → {e}")
 
-print("🎉 すべてのRSS記事をスプレッドシートに追加しました。")
+print("\n🎉 デバッグ完了: RSS記事のスプレッドシート追加終了")
