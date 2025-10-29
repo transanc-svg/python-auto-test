@@ -22,10 +22,15 @@ existing_urls = existing_urls[1:] if existing_urls else []
 
 # --- RSSフィード ---
 rss_url = "https://news.google.com/rss/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNRGRtTVhnU0FtcGhLQUFQAQ?hl=ja&gl=JP&ceid=JP%3Aja&oc=11"
-feed = feedparser.parse(rss_url)
+
+# User-Agent指定でRSSを取得
+headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+feed = feedparser.parse(rss_url, request_headers=headers)
 entries_to_process = feed.entries[::-1]  # 古い順に処理
 
 print(f"📌 RSS取得件数: {len(entries_to_process)}")
+if len(entries_to_process) == 0:
+    print("⚠ RSS取得失敗: User-Agent変更でも取得できませんでした。")
 
 # --- ヘッダー追加 ---
 if not existing_urls:
