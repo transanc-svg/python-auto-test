@@ -18,7 +18,7 @@ creds_dict = json.loads(google_creds)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 
-spreadsheet_name = "タイ"
+spreadsheet_name = "thai"
 sheet = client.open(spreadsheet_name).sheet1
 
 # --- 既存のURLを取得して重複防止 ---
@@ -144,3 +144,4 @@ for entry in entries_to_process:
 
 driver.quit()
 print("最新ニュースから og:image と description とハッシュタグをスプレッドシートに追加しました。")
+
